@@ -37,14 +37,21 @@ def get_ethbtc():
     return current, pct
 
 def get_coinglass_funding():
-    """CoinGlass官方API获取BTC、ETH永续资金费率"""
+    """CoinGlass V4 API，获取币安BTCUSDT、ETHUSDT最新资金费率"""
     try:
         headers = {"CG-API-KEY": COINGLASS_API_KEY}
-        url = "https://api.coinglass.com/api/futures/fundingRate"
-        r = requests.get(url, headers=headers, timeout=15)
-        data = r.json()
-        btc_f = float(data["data"]["BTC"]["fundingRate"])
-        eth_f = float(data["data"]["ETH"]["fundingRate"])
+        base_url = "https://open-api-v4.coinglass.com/api/futures/funding-rate/history"
+        # BTCUSDT Binance
+        btc_params = {"exchange":"Binance","symbol":"BTCUSDT","interval":"8h","limit":1}
+        btc_r = requests.get(base_url, headers=headers, params=btc_params, timeout=15)
+        btc_data = btc_r.json()
+        btc_f = float(btc_data["data"]["list"][0]["close"])
+
+        # ETHUSDT Binance
+        eth_params = {"exchange":"Binance","symbol":"ETHUSDT","interval":"8h","limit":1}
+        eth_r = requests.get(base_url, headers=headers, params=eth_params, timeout=15)
+        eth_data = eth_r.json()
+        eth_f = float(eth_data["data"]["list"][0]["close"])
         return btc_f, eth_f
     except Exception as e:
         print(f"CoinGlass 资金费率读取异常: {e}")
@@ -77,7 +84,7 @@ def main():
     # CoinGlass资金费率
     try:
         btc_fund, eth_fund = get_coinglass_funding()
-        report += "【永续资金费率 CoinGlass】\n"
+        report += "【永续资金费率 CoinGlass(Binance)】\n"
         if btc_fund is not None:
             report += f"BTC: {btc_fund:.4f}\n"
         else:
