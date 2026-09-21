@@ -15,26 +15,16 @@ def send_tg_message(text):
         print(f"TG发送失败: {e}")
 
 def get_btc_price_200ma():
-    # CoinGecko获取BTC历史30天日线，计算200MA偏离（简化：30日窗口演示分位）
+    # CoinGecko 获取BTC 30天历史价格
     url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=30"
     res = requests.get(url, timeout=15).json()
     prices = [p[1] for p in res["prices"]]
     ser = pd.Series(prices)
-    ma200 = ser.rolling(window=20, min_periods=1).mean().iloc[-1]
+    ma20 = ser.rolling(window=20, min_periods=1).mean().iloc[-1]
     spot = ser.iloc[-1]
-    dev = (spot - ma200) / ma200
+    dev = (spot - ma20) / ma20
     pct = ser.rank(pct=True).iloc[-1] * 100
     return spot, dev, pct
-
-def get_rsi(series, period=14):
-    delta = series.diff()
-    gain = delta.where(delta>0,0)
-    loss = -delta.where(delta<0,0)
-    avg_gain = gain.rolling(window=period).mean()
-    avg_loss = loss.rolling(window=period).mean()
-    rs = avg_gain / avg_loss
-    rsi = 100 - (100/(1+rs))
-    return rsi.iloc[-1]
 
 def get_ethbtc():
     url = "https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=btc&days=30"
@@ -45,19 +35,16 @@ def get_ethbtc():
     pct = ser.rank(pct=True).iloc[-1] * 100
     return current, pct
 
-def get_binance_funding(symbol):
-    url = "https://fapi.binance.com/fapi/v1/premiumIndex"
-    params = {"symbol":symbol}
-    r = requests.get(url, params=params, timeout=15).json()
-    return float(r["lastFundingRate"])
-
-def get_btc_oi():
-    # Binance公开OI
-    url = "https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT"
-    r = requests.get(url, timeout=15).json()
-    oi_val = float(r["openInterest"])
-    # 简化：固定30日区间做演示分位；生产可保存历史数据
-    return oi_val
+def get_binance_funding_safe(symbol):
+    """带容错获取资金费率，失败返回None"""
+    try:
+        url = "https://fapi.binance.com/fapi/v1/premiumIndex"
+        params = {"symbol": symbol}
+        r = requests.get(url, params=params, timeout=10)
+        data = r.json()
+        return float(data["lastFundingRate"])
+    except Exception:
+        return None
 
 def get_fear_greed():
     url = "https://api.alternative.me/fng/"
@@ -70,14 +57,24 @@ def main():
     report += f"更新时间：{datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}\n\n"
     try:
         btc_spot, btc_dev, btc_dev_pct = get_btc_price_200ma()
-        report += f"【BTC 现货】\n价格: ${btc_spot:.0f}\n相对均线偏离: {btc_dev:.2%} | 30日分位: {btc_dev_pct:.1f}%\n\n"
+        report += f"【BTC 现货】\n价格: ${btc_spot:.0f}\n相对20日均线偏离: {btc_dev:.2%} | 30日分位: {btc_dev_pct:.1f}%\n\n"
 
         ethbtc, ethbtc_pct = get_ethbtc()
         report += f"【ETH/BTC】\n比值: {ethbtc:.4f} | 30日分位: {ethbtc_pct:.1f}%\n\n"
 
-        btc_fund = get_binance_funding("BTCUSDT")
-        eth_fund = get_binance_funding("ETHUSDT")
-        report += f"【永续资金费率】\nBTC: {btc_fund:.4f}\nETH: {eth_fund:.4f}\n\n"
+        # 资金费率（容错）
+        btc_fund = get_binance_funding_safe("BTCUSDT")
+        eth_fund = get_binance_funding_safe("ETHUSDT")
+        report += "【永续资金费率】\n"
+        if btc_fund is not None:
+            report += f"BTC: {btc_fund:.4f}\n"
+        else:
+            report += "BTC: 获取失败\n"
+        if eth_fund is not None:
+            report += f"ETH: {eth_fund:.4f}\n"
+        else:
+            report += "ETH: 获取失败\n"
+        report += "\n"
 
         fg = get_fear_greed()
         report += f"【恐慌贪婪指数】{fg}\n\n"
