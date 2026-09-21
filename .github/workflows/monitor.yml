@@ -1,0 +1,31 @@
+name: LP Monitor
+
+# 定时触发：每30分钟执行一次（UTC时间）
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  # 代码提交时也手动运行一次，方便测试
+  push:
+    branches: [ main ]
+
+jobs:
+  run-monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run script
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          COINGLASS_API_KEY: ${{ secrets.COINGLASS_API_KEY }}
+        run: python main.py
