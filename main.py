@@ -34,67 +34,70 @@ def get_crypto_prices():
     return btc, wbtc, eth
 
 def get_binance_funding(symbol):
-    """Binance公开API获取永续合约当前资金费率，symbol: BTCUSDT / ETHUSDT"""
-    url = f"https://fapi.binance.com/fapi/v1/fundingRate"
-    params = {"symbol": symbol, "limit":1}
+    """Binance premiumIndex 获取永续资金费率，symbol: BTCUSDT / ETHUSDT"""
+    url = "https://fapi.binance.com/fapi/v1/premiumIndex"
+    params = {"symbol": symbol}
     resp = requests.get(url, params=params, timeout=10)
     data = resp.json()
-    funding_rate = float(data[0]["fundingRate"])
+    funding_rate = float(data["lastFundingRate"])
     return funding_rate
 
 def main():
     global alert_counter_btc, alert_counter_eth
     print("===== LP监控程序启动 =====")
-    # 获取价格
-    btc_price, wbtc_price, eth_price = get_crypto_prices()
-    # 获取资金费率
-    btc_funding = get_binance_funding("BTCUSDT")
-    eth_funding = get_binance_funding("ETHUSDT")
+    try:
+        # 获取价格
+        btc_price, wbtc_price, eth_price = get_crypto_prices()
+        # 获取资金费率
+        btc_funding = get_binance_funding("BTCUSDT")
+        eth_funding = get_binance_funding("ETHUSDT")
 
-    print(f"BTC: ${btc_price}, WBTC: ${wbtc_price}, ETH: ${eth_price}")
-    print(f"BTC Funding: {btc_funding:.4f}, ETH Funding: {eth_funding:.4f}")
+        print(f"BTC: ${btc_price}, WBTC: ${wbtc_price}, ETH: ${eth_price}")
+        print(f"BTC Funding: {btc_funding:.4f}, ETH Funding: {eth_funding:.4f}")
 
-    # WBTC/BTC价差检查
-    price_diff = abs(wbtc_price - btc_price) / btc_price
-    if price_diff >= WBTC_BTC_DEVIATION_ALERT:
-        msg = f"⚠️ WBTC脱锚告警！\nBTC: ${btc_price}\nWBTC: ${wbtc_price}\n价差: {price_diff:.2%}"
-        send_tg_message(msg)
+        # WBTC/BTC价差检查
+        price_diff = abs(wbtc_price - btc_price) / btc_price
+        if price_diff >= WBTC_BTC_DEVIATION_ALERT:
+            msg = f"⚠️ WBTC脱锚告警！\nBTC: ${btc_price}\nWBTC: ${wbtc_price}\n价差: {price_diff:.2%}"
+            send_tg_message(msg)
 
-    # ========== BTC/WBTC LP 判断逻辑 ==========
-    near_upper_btc = btc_price >= WBTC_LP_HIGH * (1 - WBTC_PRICE_ALERT_PCT)
-    funding_hot_btc = btc_funding >= FUNDING_RATE_THRESHOLD
-    btc_trigger_count = sum([near_upper_btc, funding_hot_btc])
+        # ========== BTC/WBTC LP 判断逻辑 ==========
+        near_upper_btc = btc_price >= WBTC_LP_HIGH * (1 - WBTC_PRICE_ALERT_PCT)
+        funding_hot_btc = btc_funding >= FUNDING_RATE_THRESHOLD
+        btc_trigger_count = sum([near_upper_btc, funding_hot_btc])
 
-    if btc_trigger_count >= 2:
-        alert_counter_btc += 1
-        if alert_counter_btc >= ALERT_CONFIRM_TIMES:
-            msg = f"""🚨 BTC/WBTC LP告警触发！
+        if btc_trigger_count >= 2:
+            alert_counter_btc += 1
+            if alert_counter_btc >= ALERT_CONFIRM_TIMES:
+                msg = f"""🚨 BTC/WBTC LP告警触发！
 BTC现价：${btc_price}
 资金费率：{btc_funding:.4f}
 你的LP区间：${WBTC_LP_LOW} ~ ${WBTC_LP_HIGH}
 多个过热指标触发，请评估是否移除流动性。"""
-            send_tg_message(msg)
+                send_tg_message(msg)
+                alert_counter_btc = 0
+        else:
             alert_counter_btc = 0
-    else:
-        alert_counter_btc = 0
 
-    # ========== ETH LP 判断逻辑 ==========
-    near_upper_eth = eth_price >= ETH_LP_HIGH * (1 - ETH_PRICE_ALERT_PCT)
-    funding_hot_eth = eth_funding >= FUNDING_RATE_THRESHOLD
-    eth_trigger_count = sum([near_upper_eth, funding_hot_eth])
+        # ========== ETH LP 判断逻辑 ==========
+        near_upper_eth = eth_price >= ETH_LP_HIGH * (1 - ETH_PRICE_ALERT_PCT)
+        funding_hot_eth = eth_funding >= FUNDING_RATE_THRESHOLD
+        eth_trigger_count = sum([near_upper_eth, funding_hot_eth])
 
-    if eth_trigger_count >= 2:
-        alert_counter_eth +=1
-        if alert_counter_eth >= ALERT_CONFIRM_TIMES:
-            msg = f"""🚨 ETH LP告警触发！
+        if eth_trigger_count >= 2:
+            alert_counter_eth +=1
+            if alert_counter_eth >= ALERT_CONFIRM_TIMES:
+                msg = f"""🚨 ETH LP告警触发！
 ETH现价：${eth_price}
 资金费率：{eth_funding:.4f}
 你的LP区间：${ETH_LP_LOW} ~ ${ETH_LP_HIGH}
 多个过热指标触发，请评估是否移除流动性。"""
-            send_tg_message(msg)
+                send_tg_message(msg)
+                alert_counter_eth =0
+        else:
             alert_counter_eth =0
-    else:
-        alert_counter_eth =0
+    except Exception as e:
+        print(f"程序运行异常：{e}")
 
 if __name__ == "__main__":
     main()
